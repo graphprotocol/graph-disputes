@@ -12,9 +12,9 @@ export interface Allocation {
   id: string
   createdAtEpoch: number
   createdAtBlockHash: string
-  closedAtEpoch: number
-  closedAtBlockHash: string
-  closedAtBlockNumber: number
+  closedAtEpoch: number | null
+  closedAtBlockHash: string | null
+  closedAtBlockNumber: number | null
   poi: string
   indexer?: Indexer
   subgraphDeployment?: SubgraphDeployment
@@ -111,6 +111,11 @@ export const getEpoch = async (
       { epochID },
     )
     .toPromise()
+
+  if (result.error) {
+    throw new Error(`Failed to fetch epoch: ${result.error.message}`)
+  }
+
   return result.data.epoch
 }
 
@@ -142,6 +147,11 @@ export const getAllocation = async (
       { allocationID },
     )
     .toPromise()
+
+  if (result.error) {
+    throw new Error(`Failed to fetch allocation: ${result.error.message}`)
+  }
+
   return result.data.allocation
 }
 
@@ -193,6 +203,11 @@ export const getDisputes = async (
       { status },
     )
     .toPromise()
+
+  if (result.error) {
+    throw new Error(`Failed to fetch disputes: ${result.error.message}`)
+  }
+
   return result.data.disputes
 }
 
@@ -250,6 +265,11 @@ export const getDispute = async (
       { disputeID },
     )
     .toPromise()
+
+  if (result.error) {
+    throw new Error(`Failed to fetch dispute: ${result.error.message}`)
+  }
+
   return result.data.dispute
 }
 
@@ -273,6 +293,11 @@ export const getNetworkSettings = async (
       { networkId },
     )
     .toPromise()
+
+  if (result.error) {
+    throw new Error(`Failed to fetch network settings: ${result.error.message}`)
+  }
+
   return result.data.graphNetwork
 }
 
@@ -290,7 +315,10 @@ export const getAllocationsByDeployment = async (
           query ($ipfsHash: String!, $lastId: String!) {
             allocations(
               first: 1000
-              where: { subgraphDeployment_: { ipfsHash: $ipfsHash }, id_gt: $lastId }
+              where: {
+                subgraphDeployment_: { ipfsHash: $ipfsHash }
+                id_gt: $lastId
+              }
               orderBy: id
               orderDirection: asc
             ) {
@@ -360,7 +388,9 @@ export const getPOISubmissions = async (
         .toPromise()
 
       if (result.error) {
-        throw new Error(`Failed to fetch POI submissions: ${result.error.message}`)
+        throw new Error(
+          `Failed to fetch POI submissions: ${result.error.message}`,
+        )
       }
 
       const submissions = result.data?.poiSubmissions || []
@@ -407,17 +437,16 @@ export const getEpochBlockNumber = async (
   chainId: string,
 ): Promise<number | null> => {
   const epochId = epoch.toString()
-  const networkId = chainId.startsWith('eip155:') ? chainId : `eip155:${chainId}`
+  const networkId = chainId.startsWith('eip155:')
+    ? chainId
+    : `eip155:${chainId}`
 
   const result = await eboSubgraph
     .query(
       gql`
         query ($epochId: String!, $networkId: String!) {
           networkEpochBlockNumbers(
-            where: {
-              epoch_: { id: $epochId }
-              network_: { id: $networkId }
-            }
+            where: { epoch_: { id: $epochId }, network_: { id: $networkId } }
           ) {
             id
             blockNumber
@@ -429,7 +458,9 @@ export const getEpochBlockNumber = async (
     .toPromise()
 
   if (result.error) {
-    throw new Error(`Failed to fetch epoch block number: ${result.error.message}`)
+    throw new Error(
+      `Failed to fetch epoch block number: ${result.error.message}`,
+    )
   }
 
   const data = result.data?.networkEpochBlockNumbers

@@ -56,10 +56,12 @@ function groupSubmissions(submissions: POISubmission[]): GroupedByEpoch[] {
 
     result.push({
       epoch,
-      byPublicPoi: Array.from(byPoi.entries()).map(([publicPoi, allocations]) => ({
-        publicPoi,
-        allocations,
-      })),
+      byPublicPoi: Array.from(byPoi.entries()).map(
+        ([publicPoi, allocations]) => ({
+          publicPoi,
+          allocations,
+        }),
+      ),
     })
   }
 
@@ -143,9 +145,14 @@ export const poiListCommand = {
     const indexerFilters = argv.indexer as string[] | undefined
     const jsonOutput = argv.json as boolean
 
-    const spinner = ora(`Fetching allocations for deployment ${deployment}...`).start()
+    const spinner = ora(
+      `Fetching allocations for deployment ${deployment}...`,
+    ).start()
 
-    const allocations = await getAllocationsByDeployment(networkSubgraph, deployment)
+    const allocations = await getAllocationsByDeployment(
+      networkSubgraph,
+      deployment,
+    )
     spinner.text = `Found ${allocations.length} allocations. Fetching POI submissions...`
 
     if (allocations.length === 0) {
@@ -160,8 +167,12 @@ export const poiListCommand = {
 
     if (indexerFilters && indexerFilters.length > 0) {
       const filtersLower = indexerFilters.map(f => f.toLowerCase())
-      submissions = submissions.filter(s => filtersLower.includes(s.allocation.indexer.id.toLowerCase()))
-      log.info(`Found ${submissions.length} POI submissions for ${indexerFilters.length} indexer(s)\n`)
+      submissions = submissions.filter(s =>
+        filtersLower.includes(s.allocation.indexer.id.toLowerCase()),
+      )
+      log.info(
+        `Found ${submissions.length} POI submissions for ${indexerFilters.length} indexer(s)\n`,
+      )
     } else {
       log.info(`Found ${submissions.length} POI submissions\n`)
     }
@@ -188,7 +199,11 @@ export const poiListCommand = {
           : chalk.gray('null')
         log.info(`  ${chalk.yellow('publicPoi')}: ${poiDisplay}`)
         for (const alloc of poiGroup.allocations) {
-          log.info(`    ${chalk.gray('allocation')}: ${alloc.id} ${chalk.gray('indexer')}: ${alloc.indexer}`)
+          log.info(
+            `    ${chalk.gray('allocation')}: ${alloc.id} ${chalk.gray(
+              'indexer',
+            )}: ${alloc.indexer}`,
+          )
         }
       }
       log.info('')
@@ -222,7 +237,12 @@ function parseEpochRange(epochArg: string): number[] {
 interface EpochResult {
   epoch: number
   blockNumber: number
-  results: { indexer: string; url: string | null; poi: string | null; error?: string }[]
+  results: {
+    indexer: string
+    url: string | null
+    poi: string | null
+    error?: string
+  }[]
 }
 
 export const poiQueryCommand = {
@@ -269,7 +289,9 @@ export const poiQueryCommand = {
     const jsonOutput = argv.json as boolean
 
     if (!eboSubgraph) {
-      log.error('EBO subgraph endpoint is required for this command. Set --ebo-subgraph-endpoint or add eboSubgraphEndpoint to your config.')
+      log.error(
+        'EBO subgraph endpoint is required for this command. Set --ebo-subgraph-endpoint or add eboSubgraphEndpoint to your config.',
+      )
       return
     }
 
@@ -291,11 +313,18 @@ export const poiQueryCommand = {
       const blockNumber = await getEpochBlockNumber(eboSubgraph, epoch, chainId)
 
       if (!blockNumber) {
-        log.warn(`Could not find block number for epoch ${epoch} on chain ${chainId}, skipping`)
+        log.warn(
+          `Could not find block number for epoch ${epoch} on chain ${chainId}, skipping`,
+        )
         continue
       }
 
-      const results: { indexer: string; url: string | null; poi: string | null; error?: string }[] = []
+      const results: {
+        indexer: string
+        url: string | null
+        poi: string | null
+        error?: string
+      }[] = []
 
       for (const indexerAddress of indexerAddresses) {
         spinner.text = `Epoch ${epoch}: querying indexer ${indexerAddress}...`
@@ -303,20 +332,39 @@ export const poiQueryCommand = {
         const indexerInfo = await getIndexer(networkSubgraph, indexerAddress)
 
         if (!indexerInfo) {
-          results.push({ indexer: indexerAddress, url: null, poi: null, error: 'Indexer not found' })
+          results.push({
+            indexer: indexerAddress,
+            url: null,
+            poi: null,
+            error: 'Indexer not found',
+          })
           continue
         }
 
         if (!indexerInfo.url) {
-          results.push({ indexer: indexerAddress, url: null, poi: null, error: 'Indexer has no URL configured' })
+          results.push({
+            indexer: indexerAddress,
+            url: null,
+            poi: null,
+            error: 'Indexer has no URL configured',
+          })
           continue
         }
 
         try {
-          const poi = await queryIndexerPOI(indexerInfo.url, deployment, blockNumber)
+          const poi = await queryIndexerPOI(
+            indexerInfo.url,
+            deployment,
+            blockNumber,
+          )
           results.push({ indexer: indexerAddress, url: indexerInfo.url, poi })
         } catch (err) {
-          results.push({ indexer: indexerAddress, url: indexerInfo.url, poi: null, error: err.message })
+          results.push({
+            indexer: indexerAddress,
+            url: indexerInfo.url,
+            poi: null,
+            error: err.message,
+          })
         }
       }
 
@@ -326,7 +374,9 @@ export const poiQueryCommand = {
     spinner.stop()
 
     if (jsonOutput) {
-      log.info(JSON.stringify({ deployment, chainId, epochs: epochResults }, null, 2))
+      log.info(
+        JSON.stringify({ deployment, chainId, epochs: epochResults }, null, 2),
+      )
       return
     }
 
@@ -335,19 +385,37 @@ export const poiQueryCommand = {
     log.info(chalk.gray(`chain: ${chainId}\n`))
 
     for (const epochResult of epochResults) {
-      const uniquePois = new Set(epochResult.results.filter(r => r.poi).map(r => r.poi))
+      const uniquePois = new Set(
+        epochResult.results.filter(r => r.poi).map(r => r.poi),
+      )
       const hasMismatch = uniquePois.size > 1
       const mismatchLabel = hasMismatch ? chalk.red(' [POI MISMATCH]') : ''
 
-      log.info(chalk.bold(`Epoch ${epochResult.epoch}`) + chalk.gray(` (block ${epochResult.blockNumber})`) + mismatchLabel)
+      log.info(
+        chalk.bold(`Epoch ${epochResult.epoch}`) +
+          chalk.gray(` (block ${epochResult.blockNumber})`) +
+          mismatchLabel,
+      )
 
       for (const result of epochResult.results) {
         if (result.error) {
-          log.info(`  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.red('error')}: ${result.error}`)
+          log.info(
+            `  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.red(
+              'error',
+            )}: ${result.error}`,
+          )
         } else if (result.poi) {
-          log.info(`  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.yellow('poi')}: ${chalk.cyan(result.poi)}`)
+          log.info(
+            `  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.yellow(
+              'poi',
+            )}: ${chalk.cyan(result.poi)}`,
+          )
         } else {
-          log.info(`  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.yellow('poi')}: ${chalk.gray('null')}`)
+          log.info(
+            `  ${chalk.gray('indexer')}: ${result.indexer} ${chalk.yellow(
+              'poi',
+            )}: ${chalk.gray('null')}`,
+          )
         }
       }
       log.info('')
@@ -363,9 +431,7 @@ export const poiCommand = {
   command: 'poi',
   describe: 'Public POI commands',
   builder: (yargs: Argv): Argv => {
-    return yargs
-      .command(poiListCommand)
-      .command(poiQueryCommand)
+    return yargs.command(poiListCommand).command(poiQueryCommand)
   },
   handler: async (): Promise<void> => {
     yargs.showHelp()
