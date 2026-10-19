@@ -62,7 +62,9 @@ export const showCommand = {
       // between previous epoch start block and block for the closed allocation
       // This can help find bugs in the software
       if (rainbow && disputeIDs.length === 1) {
-        const endBlock = dispute.allocation.closedAtBlockNumber
+        const endBlock =
+          dispute.allocation.closedAtBlockNumber ??
+          disputeEntry.Allocation.referenceEpoch.startBlock.number
         const startBlock = disputeEntry.POI.Reference.prevEpoch.startBlock
         const blockDiff = endBlock - startBlock
         const bar = new SingleBar({

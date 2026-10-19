@@ -5,7 +5,11 @@ import chalk from 'chalk'
 import { DisputeManager } from '@graphprotocol/interfaces'
 
 import { log } from './logging'
-import { populateEntry, isDisputeOlderThanTwoThawingPeriods } from './dispute'
+import {
+  populateEntry,
+  getReferenceEpoch,
+  isDisputeOlderThanTwoThawingPeriods,
+} from './dispute'
 import { Environment } from './env'
 import { getDispute, getNetworkSettings } from './model'
 import { waitTransaction } from './network'
@@ -96,10 +100,12 @@ export class DisputeResolver {
       return true
     }
 
-    return !isDisputeOlderThanTwoThawingPeriods(
-      dispute.allocation.closedAtEpoch,
+    const referenceEpoch = await getReferenceEpoch(
+      this.env.networkSubgraph,
+      dispute.allocation,
       networkSettings,
     )
+    return !isDisputeOlderThanTwoThawingPeriods(referenceEpoch, networkSettings)
   }
 
   showStatuteOfLimitationsError(): void {

@@ -1,7 +1,14 @@
 import chalk from 'chalk'
 import { SubgraphDeploymentID } from '@graphprotocol/common-ts'
+import { Client } from '@urql/core'
 
-import { getEpoch, Dispute, GraphNetwork } from './model'
+import {
+  getEpoch,
+  getPOISubmissions,
+  Allocation,
+  Dispute,
+  GraphNetwork,
+} from './model'
 import { Environment } from './env'
 import { toGRT } from './utils'
 import { EthereumBlock } from './poi'
@@ -34,14 +41,15 @@ export type DisputeEntry = {
     id: string
     createdAtEpoch: number
     createdAtBlock: string
-    closedAtEpoch: {
+    active: boolean
+    referenceEpoch: {
       id: number
       startBlock: {
         hash: string
         number: number
       }
     }
-    closedAtBlock: {
+    closedAtBlock?: {
       hash: string
       number: number
     }
@@ -100,6 +108,27 @@ function styleClosedAtEpoch(
   return chalk.cyanBright(closedAtEpoch)
 }
 
+function formatAllocationEpoch(
+  allocation: DisputeEntry['Allocation'],
+  networkSettings: GraphNetwork,
+) {
+  const epoch = {
+    id: styleClosedAtEpoch(allocation.referenceEpoch.id, networkSettings),
+    startBlock:
+      chalk.cyanBright(allocation.referenceEpoch.startBlock.hash) +
+      chalk.gray(` (#${allocation.referenceEpoch.startBlock.number})`),
+  }
+  if (allocation.active) {
+    return { status: chalk.yellowBright('Active'), lastPoiEpoch: epoch }
+  }
+  return {
+    closedAtEpoch: epoch,
+    closedAtBlock:
+      chalk.cyanBright(allocation.closedAtBlock.hash) +
+      chalk.gray(` (#${allocation.closedAtBlock.number})`),
+  }
+}
+
 const DAY_SECONDS = 60 * 60 * 24
 
 function relativeDays(ts: number) {
@@ -127,6 +156,23 @@ export const isDisputeOlderThanTwoThawingPeriods = (
   return resolutionEpochsLeft <= 0
 }
 
+// Closed allocations are checked at their closing epoch. Active allocations
+// (disputable under Horizon) are checked at their latest POI presentation.
+export const getReferenceEpoch = async (
+  networkSubgraph: Client,
+  allocation: Allocation,
+  networkSettings: GraphNetwork,
+): Promise<number> => {
+  if (allocation.closedAtEpoch !== null) {
+    return allocation.closedAtEpoch
+  }
+  const submissions = await getPOISubmissions(networkSubgraph, [allocation.id])
+  if (submissions.length === 0) {
+    return networkSettings.currentEpoch
+  }
+  return Math.max(...submissions.map(s => s.submittedAtEpoch))
+}
+
 export const populateEntry = async (
   dispute: Dispute,
   env: Environment,
@@ -145,9 +191,14 @@ export const populateEntry = async (
   let poi: DisputeEntry['POI']
   if (dispute.allocation) {
     // Epochs
+    const referenceEpoch = await getReferenceEpoch(
+      networkSubgraph,
+      dispute.allocation,
+      networkSettings,
+    )
     const [lastEpoch, prevEpoch] = await Promise.all([
-      getEpoch(networkSubgraph, dispute.allocation.closedAtEpoch),
-      getEpoch(networkSubgraph, dispute.allocation.closedAtEpoch - 1),
+      getEpoch(networkSubgraph, referenceEpoch),
+      getEpoch(networkSubgraph, referenceEpoch - 1),
     ])
 
     // Reference POI
@@ -166,17 +217,20 @@ export const populateEntry = async (
       id: dispute.allocation.id,
       createdAtEpoch: dispute.allocation.createdAtEpoch,
       createdAtBlock: dispute.allocation.createdAtBlockHash,
-      closedAtEpoch: {
-        id: dispute.allocation.closedAtEpoch,
+      active: dispute.allocation.closedAtEpoch === null,
+      referenceEpoch: {
+        id: referenceEpoch,
         startBlock: {
           hash: lastBlock.hash,
           number: lastBlock.number,
         },
       },
-      closedAtBlock: {
+    }
+    if (!allocation.active) {
+      allocation.closedAtBlock = {
         hash: dispute.allocation.closedAtBlockHash,
         number: dispute.allocation.closedAtBlockNumber,
-      },
+      }
     }
     poi = {
       submitted: dispute.allocation.poi,
@@ -267,7 +321,7 @@ export const formatEntry = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Record<string, any> => {
   const resolutionEpochsLeft = getDisputeResolutionEpochsLeft(
-    entry.Allocation.closedAtEpoch.id,
+    entry.Allocation.referenceEpoch.id,
     networkSettings,
   )
 
@@ -302,18 +356,7 @@ export const formatEntry = (
       id: chalk.cyanBright(entry.Allocation.id),
       createdAtEpoch: chalk.cyanBright(entry.Allocation.createdAtEpoch),
       createdAtBlock: chalk.cyanBright(entry.Allocation.createdAtBlock),
-      closedAtEpoch: {
-        id: styleClosedAtEpoch(
-          entry.Allocation.closedAtEpoch.id,
-          networkSettings,
-        ),
-        startBlock:
-          chalk.cyanBright(entry.Allocation.closedAtEpoch.startBlock.hash) +
-          chalk.gray(` (#${entry.Allocation.closedAtEpoch.startBlock.number})`),
-      },
-      closedAtBlock:
-        chalk.cyanBright(entry.Allocation.closedAtBlock.hash) +
-        chalk.gray(` (#${entry.Allocation.closedAtBlock.number})`),
+      ...formatAllocationEpoch(entry.Allocation, networkSettings),
     },
     [chalk.bold('POI')]: {
       submitted: chalk.cyanBright(entry.POI.submitted),
